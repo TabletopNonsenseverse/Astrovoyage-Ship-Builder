@@ -41,6 +41,12 @@
   const title = s => s === 'LSC' ? 'Life Support & Communications' : s === 'Power' ? 'Power Plant' : s;
   const esc = v => String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const saveQuiet = () => { try { if (typeof save === 'function') save(false); } catch (_) {} };
+  const powerCapacity = () => {
+    const primary = (typeof ship !== 'undefined' && ship?.powerPlant) || 'Basic';
+    const primaryCap = Number(POWER?.[primary]?.capacity || 0);
+    const extraCap = ((typeof ship !== 'undefined' && ship?.extraPowerPlants) || []).reduce((n,p) => n + Number(POWER?.[p]?.capacity || 0), 0);
+    return primaryCap + extraCap;
+  };
 
   const style = document.createElement('style');
   style.textContent = `
@@ -58,6 +64,8 @@
     #ships-log textarea{display:block;width:100%;min-height:520px;box-sizing:border-box;resize:vertical;background:#0c1422;color:#e8edf7;border:1px solid #394966;border-radius:10px;padding:16px;font:inherit;line-height:1.55}
     #ships-log .log-count{margin-top:7px;font-size:.75rem;color:#91a1bd;text-align:right}
     .money-input{width:100%;box-sizing:border-box;background:#0c1422;color:#e8edf7;border:1px solid #394966;border-radius:7px;padding:6px}
+    .power-edit{width:70px;box-sizing:border-box;background:#0c1422;color:#e8edf7;border:1px solid #394966;border-radius:7px;padding:5px 7px}
+    .power-slash{margin:0 5px;color:#91a1bd}
     @media(max-width:800px){.system-blocks{grid-template-columns:1fr}.mod-add,.weapon-add,.power-add{flex-direction:column}.installed-mod{grid-template-columns:1fr}}
   `;
   document.head.appendChild(style);
@@ -73,10 +81,20 @@
     const card=[...document.querySelectorAll('.grid .card')].find(c=>c.querySelector('h2')?.textContent.trim()==='Live Status');
     if(!card||typeof ship==='undefined')return;
     const old=[...card.querySelectorAll('.stat')].find(s=>s.querySelector('small')?.textContent.trim()==='PASSENGERS');
-    if(!old)return;
-    old.innerHTML='<small>MONEY</small><input class="money-input" type="number" min="0" step="1">';
-    const input=old.querySelector('input');input.value=Number(ship.money||0);
-    input.addEventListener('input',()=>{ship.money=Math.max(0,Number(input.value)||0);saveQuiet();});
+    if(old){old.innerHTML='<small>MONEY</small><input class="money-input" type="number" min="0" step="1">';const input=old.querySelector('input');input.value=Number(ship.money||0);input.addEventListener('input',()=>{ship.money=Math.max(0,Number(input.value)||0);saveQuiet();});}
+    const stat=[...card.querySelectorAll('.stat')].find(s=>s.querySelector('small')?.textContent.trim()==='POWER');
+    if(!stat)return;
+    const cap=powerCapacity();
+    let current=stat.querySelector('[data-power-current]');
+    let max=stat.querySelector('[data-power-max]');
+    if(!current||!max){
+      stat.innerHTML=`<small>POWER</small><div class="power-line"><input data-power-current class="power-edit" type="number" min="0" step="1"><span class="power-slash">/</span><input data-power-max class="power-edit" type="number" min="0" step="1"><button class="mini" onclick="spendPower(10)">−10</button></div>`;
+      current=stat.querySelector('[data-power-current]');max=stat.querySelector('[data-power-max]');
+      current.addEventListener('input',()=>{ship.currentPower=Math.max(0,Number(current.value)||0);saveQuiet();});
+      max.addEventListener('input',()=>{ship.powerCapacity=Math.max(0,Number(max.value)||0);ship.currentPower=Math.min(Math.max(0,Number(ship.currentPower)||0),ship.powerCapacity);current.value=ship.currentPower;saveQuiet();});
+    }
+    current.value=String(Math.max(0,Number(ship.currentPower)||0));
+    max.value=String(Number.isFinite(Number(ship.powerCapacity)) ? Number(ship.powerCapacity) : cap);
   }
 
   function actionMarkup(a){
@@ -129,8 +147,8 @@
     wrap.querySelectorAll('[data-remove-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.mods=(ship.mods||[]).filter(m=>m!==btn.dataset.removeMod);saveQuiet();buildStations();}));
     wrap.querySelector('#station-add-weapon')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-weapon-select')?.value;if(!v)return;ship.weapons=ship.weapons||[];ship.weapons.push({type:v,qty:1});saveQuiet();buildStations();});
     wrap.querySelectorAll('[data-remove-weapon]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.weapons.splice(Number(btn.dataset.removeWeapon),1);saveQuiet();buildStations();}));
-    wrap.querySelector('#station-add-power')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-power-select')?.value;if(!v)return;ship.extraPowerPlants=ship.extraPowerPlants||[];ship.extraPowerPlants.push(v);saveQuiet();buildStations();});
-    wrap.querySelectorAll('[data-remove-power]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.extraPowerPlants.splice(Number(btn.dataset.removePower),1);saveQuiet();buildStations();}));
+    wrap.querySelector('#station-add-power')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-power-select')?.value;if(!v)return;const y=window.scrollY;ship.extraPowerPlants=ship.extraPowerPlants||[];ship.extraPowerPlants.push(v);saveQuiet();buildStations();updateLiveStatus();requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:'auto'}));}));
+    wrap.querySelectorAll('[data-remove-power]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const y=window.scrollY;ship.extraPowerPlants.splice(Number(btn.dataset.removePower),1);saveQuiet();buildStations();updateLiveStatus();requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:'auto'}));}));
   }
 
   function buildLog(){
