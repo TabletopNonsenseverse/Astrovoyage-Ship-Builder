@@ -11,8 +11,6 @@
     return window.ship.extraPowerPlants;
   };
 
-  // Extend the real calculation used by the ship renderer. The previous fix only
-  // changed the displayed number; this changes the actual calculated capacity.
   window.calc = function () {
     const result = baseCalc();
     const list = extras();
@@ -32,8 +30,7 @@
 
   function addPlant(type) {
     if (!type || !window.POWER?.[type]) return;
-    const list = extras();
-    list.push(type);
+    extras().push(type);
     window.ship.currentPower = Math.max(0, Number(window.ship.currentPower) || 0) + Number(window.POWER[type].capacity || 0);
     persistRender();
   }
@@ -43,9 +40,6 @@
     const type = list[index];
     if (!type) return;
     list.splice(index, 1);
-    window.ship.currentPower = Math.max(0, Number(window.ship.currentPower) || 0 - Number(window.POWER[type]?.capacity || 0));
-    // The expression above is intentionally corrected below; keep current power
-    // reduced by exactly the removed plant's capacity.
     window.ship.currentPower = Math.max(0, (Number(window.ship.currentPower) || 0) - Number(window.POWER[type]?.capacity || 0));
     persistRender();
   }
@@ -56,9 +50,7 @@
   function install() {
     const card = [...document.querySelectorAll('.card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Core Systems');
     if (!card || card.querySelector('.power-plant-extra-control')) return;
-
-    const selects = [...card.querySelectorAll('select')];
-    const primary = selects.find(s => window.POWER?.[s.value]);
+    const primary = [...card.querySelectorAll('select')].find(s => window.POWER?.[s.value]);
     if (!primary) return;
 
     const wrap = document.createElement('div');
@@ -69,11 +61,7 @@
 
     const select = wrap.querySelector('.power-plant-extra-select');
     const list = wrap.querySelector('.power-plant-extra-list');
-    select.addEventListener('change', () => {
-      const type = select.value;
-      if (!type) return;
-      addPlant(type);
-    });
+    select.addEventListener('change', () => { if (select.value) addPlant(select.value); });
 
     const refreshList = () => {
       const current = extras();
