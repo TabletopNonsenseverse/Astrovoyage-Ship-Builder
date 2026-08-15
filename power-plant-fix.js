@@ -2,10 +2,33 @@
   if (window.__astroPowerPlantFix) return;
   window.__astroPowerPlantFix = true;
 
-  const getShip = () => {
-    try { return typeof ship !== 'undefined' ? ship : null; } catch (_) { return null; }
-  };
+  const getShip = () => { try { return typeof ship !== 'undefined' ? ship : null; } catch (_) { return null; } };
   const capacityOf = name => Number((typeof POWER !== 'undefined' ? POWER?.[name]?.capacity : 0) || 0);
+  const totalCapacity = s => capacityOf(s.powerPlant) + (s.extraPowerPlants || []).reduce((n, p) => n + capacityOf(p), 0);
+
+  // The base app's normalise() clamps currentPower to the PRIMARY plant only.
+  // Wrap it so additional plants are part of the legal power ceiling.
+  if (typeof window.normalise === 'function') {
+    const baseNormalise = window.normalise;
+    window.normalise = function () {
+      baseNormalise();
+      const s = getShip();
+      if (!s) return;
+      const cap = totalCapacity(s);
+      s.currentPower = Math.min(Math.max(0, Number(s.currentPower) || 0), cap);
+    };
+  }
+
+  // Wrap calc() so every existing Live Status renderer sees the combined capacity.
+  if (typeof window.calc === 'function') {
+    const baseCalc = window.calc;
+    window.calc = function () {
+      const result = baseCalc();
+      const s = getShip();
+      if (s && result?.p) result.p = { ...result.p, capacity: totalCapacity(s) };
+      return result;
+    };
+  }
 
   document.addEventListener('click', event => {
     const add = event.target.closest?.('#station-add-power');
@@ -14,13 +37,11 @@
 
     const s = getShip();
     if (!s) return;
-
     const scrollY = window.scrollY;
     let delta = 0;
 
     if (add) {
-      const select = document.getElementById('station-power-select');
-      const plant = select?.value;
+      const plant = document.getElementById('station-power-select')?.value;
       if (!plant) return;
       delta = capacityOf(plant);
     } else {
@@ -31,14 +52,10 @@
     }
 
     if (!delta) return;
+    s.currentPower = Math.max(0, (Number(s.currentPower) || 0) + delta);
 
-    // The normal handler only changes extraPowerPlants. Apply the corresponding
-    // power change to the same ship object before it re-renders the station.
-    const oldPower = Number(s.currentPower);
-    s.currentPower = Number.isFinite(oldPower) ? oldPower + delta : delta;
-
-    // The station renderer rebuilds DOM after the normal handler. Restore the
-    // user's viewport after that rebuild rather than allowing it to jump home.
+    // The normal handler performs the actual list mutation and render.
+    // Keep the viewport stable after that render.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
     });
