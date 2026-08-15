@@ -1,9 +1,14 @@
 (() => {
+  const FIELD_DA = '/Helv 10 Tf 0.08 0.11 0.17 rg';
+
   function addField(form, page, name, value, x, y, w, h, font, multiline = false) {
     const field = form.createTextField(name);
     if (multiline) field.enableMultiline();
-    field.setText(String(value ?? ''));
+    // pdf-lib validates the widget's own /DA entry when serializing. Set it on
+    // the actual AcroForm field, not only on the parent AcroForm dictionary.
+    field.acroField.dict.set(PDFLib.PDFName.of('DA'), PDFLib.PDFString.of(FIELD_DA));
     field.setFontSize(h <= 18 ? 8 : 10);
+    field.setText(String(value ?? ''));
     field.addToPage(page, {
       x, y, width: w, height: h,
       borderWidth: 1,
@@ -29,18 +34,9 @@
     const form = pdf.getForm();
     const c = calc();
 
-    // pdf-lib requires a default appearance string (/DA) on AcroForm text fields.
-    // Set it explicitly before adding widgets so every compatible PDF viewer can open the export.
-    const defaultAppearance = '/Helv 10 Tf 0.08 0.11 0.17 rg';
-    const acroForm = form.acroForm;
-    if (acroForm && acroForm.dict) {
-      acroForm.dict.set(PDFLib.PDFName.of('DA'), PDFLib.PDFString.of(defaultAppearance));
-    }
-
     let page = pdf.addPage([612, 792]);
     text(page, 'ASTROVOYAGE - STARSHIP SHEET', 40, 750, 18, fonts, true);
     text(page, 'Shared campaign ship record - Fillable PDF export', 40, 730, 9, fonts);
-
     text(page, 'SHIP IDENTITY', 40, 695, 11, fonts, true);
     addField(form, page, 'ship_name', ship.name, 40, 660, 250, 24, regular);
     addField(form, page, 'captain', ship.captain, 310, 660, 262, 24, regular);
@@ -69,12 +65,10 @@
     let y = 665;
     if (!ship.weapons.length) text(page, 'No weapons installed.', 45, y, 9, fonts);
     ship.weapons.forEach((w, i) => { const weapon = WEAPONS[w.type]; addField(form, page, `weapon_${i + 1}`, `${weapon?.name || w.type} x ${w.qty || 1}`, 40, y, 300, 24, regular); addField(form, page, `weapon_${i + 1}_notes`, `PPS ${weapon?.pps ?? '-'} | CPS ${weapon?.cps ?? '-'} | ${weapon?.range ?? ''} | ${weapon?.damage ?? ''}`, 350, y, 222, 24, regular); y -= 34; });
-
     y = Math.min(y - 10, 560);
     text(page, 'INSTALLED MODIFICATIONS', 40, y, 11, fonts, true); y -= 30;
     if (!ship.mods.length) text(page, 'No modifications installed.', 45, y, 9, fonts);
     ship.mods.forEach((m, i) => { const mod = MODS[m]; addField(form, page, `mod_${i + 1}`, `${m} - ${mod?.system || ''} - ${mod?.size || 0} t`, 40, y, 532, 25, regular); y -= 32; });
-
     text(page, 'NOTES', 40, 245, 11, fonts, true);
     addField(form, page, 'campaign_notes', ship.notes || '', 40, 90, 532, 145, regular, true);
     text(page, 'Campaign notes / repairs / debts / rumours', 45, 78, 7, fonts);
@@ -92,7 +86,6 @@
   }
 
   window.exportFillablePDF = exportFillablePDF;
-
   function installButton() {
     const actions = document.querySelector('.topbar .actions');
     if (!actions || actions.querySelector('[data-pdf-export]')) return;
