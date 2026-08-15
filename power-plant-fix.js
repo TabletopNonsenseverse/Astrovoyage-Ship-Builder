@@ -1,84 +1,70 @@
 (() => {
-  if (window.__astroPowerPlantFixV3) return;
-  window.__astroPowerPlantFixV3 = true;
+  if (window.__astroPowerPlantCalc) return;
+  window.__astroPowerPlantCalc = true;
 
-  const baseCalc = window.calc;
-  if (typeof baseCalc !== 'function') return;
+  const saveQuiet = () => { try { if (typeof save === 'function') save(false); } catch (_) {} };
 
-  const extras = () => {
-    if (!window.ship) return [];
-    if (!Array.isArray(window.ship.extraPowerPlants)) window.ship.extraPowerPlants = [];
-    return window.ship.extraPowerPlants;
-  };
-
-  window.calc = function () {
-    const result = baseCalc();
-    const list = extras();
-    const extraCapacity = list.reduce((n, type) => n + Number(window.POWER?.[type]?.capacity || 0), 0);
-    const extraSize = list.reduce((n, type) => n + Number(window.POWER?.[type]?.size || 0), 0);
-    const extraCost = list.reduce((n, type) => n + (typeof window.numMoney === 'function' ? window.numMoney(window.POWER?.[type]?.cost || 0) : 0), 0);
-    result.p = { ...result.p, capacity: result.p.capacity + extraCapacity, size: result.p.size + extraSize };
-    result.total += extraCost;
-    return result;
-  };
-
-  function persistRender() {
-    if (typeof window.normalise === 'function') window.normalise();
-    if (typeof window.render === 'function') window.render();
-    if (typeof window.debouncedSave === 'function') window.debouncedSave();
+  function totalCapacity() {
+    if (typeof ship === 'undefined' || !ship || typeof POWER === 'undefined') return 0;
+    const primary = Number(POWER[ship.powerPlant]?.capacity || 0);
+    const extras = (ship.extraPowerPlants || []).reduce((sum, type) => sum + Number(POWER[type]?.capacity || 0), 0);
+    return primary + extras;
   }
 
-  function addPlant(type) {
-    if (!type || !window.POWER?.[type]) return;
-    extras().push(type);
-    window.ship.currentPower = Math.max(0, Number(window.ship.currentPower) || 0) + Number(window.POWER[type].capacity || 0);
-    persistRender();
-  }
+  function refreshPowerDisplay() {
+    if (typeof ship === 'undefined' || !ship) return;
+    const max = totalCapacity();
+    const card = [...document.querySelectorAll('.card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Live Status');
+    if (!card) return;
+    const stat = [...card.querySelectorAll('.stat')].find(s => s.querySelector('small')?.textContent.trim() === 'POWER');
+    if (!stat) return;
 
-  function removePlant(index) {
-    const list = extras();
-    const type = list[index];
-    if (!type) return;
-    list.splice(index, 1);
-    window.ship.currentPower = Math.max(0, (Number(window.ship.currentPower) || 0) - Number(window.POWER[type]?.capacity || 0));
-    persistRender();
-  }
-
-  window.addPowerPlant = addPlant;
-  window.removePowerPlant = removePlant;
-
-  function install() {
-    const card = [...document.querySelectorAll('.card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Core Systems');
-    if (!card || card.querySelector('.power-plant-extra-control')) return;
-    const primary = [...card.querySelectorAll('select')].find(s => window.POWER?.[s.value]);
-    if (!primary) return;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'power-plant-extra-control';
-    wrap.style.cssText = 'margin-top:14px;padding-top:14px;border-top:1px solid rgba(130,150,190,.18)';
-    wrap.innerHTML = `<div class="field"><label>Add power plant</label><select class="power-plant-extra-select"><option value="">Select power plant…</option>${Object.entries(window.POWER).map(([k,p]) => `<option value="${k}">${k} · ${p.capacity} capacity · ${p.size} t · ${p.cost}</option>`).join('')}</select></div><div class="power-plant-extra-list"></div>`;
-    primary.closest('.field')?.after(wrap);
-
-    const select = wrap.querySelector('.power-plant-extra-select');
-    const list = wrap.querySelector('.power-plant-extra-list');
-    select.addEventListener('change', () => { if (select.value) addPlant(select.value); });
-
-    const refreshList = () => {
-      const current = extras();
-      list.innerHTML = current.length ? current.map((type, i) => {
-        const p = window.POWER[type];
-        return `<div class="component" style="margin-top:7px"><span><b>${type} Power Plant</b><span class="meta"> +${p.capacity} power · ${p.size} t</span></span><button type="button" class="btn danger" data-extra-power-remove="${i}">Remove</button></div>`;
-      }).join('') : '<p class="muted" style="margin:7px 0 0">No additional power plants installed.</p>';
-      list.querySelectorAll('[data-extra-power-remove]').forEach(btn => btn.addEventListener('click', () => removePlant(Number(btn.dataset.extraPowerRemove))));
-    };
-    refreshList();
+    const input = stat.querySelector('input.live-edit');
+    if (input) {
+      input.max = String(max);
+      input.value = String(Math.max(0, Math.min(max, Number(ship.currentPower) || 0)));
+    }
+    let cap = stat.querySelector('.power-capacity');
+    if (!cap) {
+      cap = document.createElement('div');
+      cap.className = 'power-capacity';
+      stat.appendChild(cap);
+    }
+    cap.textContent = `Capacity: ${max}`;
   }
 
   const style = document.createElement('style');
-  style.textContent = '.power-plant-extra-select{width:100%;box-sizing:border-box}';
+  style.textContent = '.power-capacity{margin-top:5px;font-size:.72rem;color:#91a1bd}';
   document.head.appendChild(style);
 
-  const root = document.getElementById('app');
-  if (root) new MutationObserver(() => requestAnimationFrame(install)).observe(root, { childList:true, subtree:true });
-  requestAnimationFrame(install);
+  // enhancements.js owns the actual add/remove operation. These capture handlers
+  // adjust current power before that handler runs, so the existing renderer remains
+  // responsible for rebuilding the station UI and saving the plant selection.
+  document.addEventListener('click', event => {
+    if (typeof ship === 'undefined' || !ship || typeof POWER === 'undefined') return;
+
+    const add = event.target.closest?.('#station-add-power');
+    if (add) {
+      const type = document.getElementById('station-power-select')?.value;
+      if (!type || !POWER[type]) return;
+      ship.currentPower = Math.max(0, Number(ship.currentPower) || 0) + Number(POWER[type].capacity || 0);
+      saveQuiet();
+      requestAnimationFrame(refreshPowerDisplay);
+      return;
+    }
+
+    const remove = event.target.closest?.('[data-remove-power]');
+    if (remove) {
+      const index = Number(remove.dataset.removePower);
+      const type = (ship.extraPowerPlants || [])[index];
+      if (!type || !POWER[type]) return;
+      ship.currentPower = Math.max(0, (Number(ship.currentPower) || 0) - Number(POWER[type].capacity || 0));
+      saveQuiet();
+      requestAnimationFrame(refreshPowerDisplay);
+    }
+  }, true);
+
+  const app = document.getElementById('app');
+  if (app) new MutationObserver(() => requestAnimationFrame(refreshPowerDisplay)).observe(app, {childList:true, subtree:true});
+  requestAnimationFrame(refreshPowerDisplay);
 })();
