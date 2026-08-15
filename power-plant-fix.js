@@ -1,72 +1,89 @@
 (() => {
-  if (window.__astroPowerPlantFix) return;
-  window.__astroPowerPlantFix = true;
+  if (window.__astroPowerPlantFixV2) return;
+  window.__astroPowerPlantFixV2 = true;
 
-  function extraCapacity(s) {
-    return (s?.extraPowerPlants || []).reduce((n, p) => n + (POWER[p]?.capacity || 0), 0);
-  }
+  const saveQuiet = () => { try { if (typeof save === 'function') save(false); } catch (_) {} };
+  const capacity = () => {
+    if (typeof ship === 'undefined' || !ship) return 0;
+    const primary = POWER?.[ship.powerPlant]?.capacity || 0;
+    const extras = (ship.extraPowerPlants || []).reduce((n, p) => n + (POWER?.[p]?.capacity || 0), 0);
+    return primary + extras;
+  };
 
-  // Extend the existing calculation rather than replacing the ship renderer.
-  const originalCalc = window.calc;
-  if (typeof originalCalc === 'function') {
-    window.calc = function () {
-      const result = originalCalc();
-      const extra = extraCapacity(window.ship);
-      result.p = { ...result.p, capacity: result.p.capacity + extra };
-      return result;
-    };
-  }
-
-  function saveQuiet() { try { if (typeof save === 'function') save(false); } catch (_) {} }
-
-  function refreshPowerState(oldCapacity, newCapacity, delta) {
-    if (!window.ship) return;
-    // Adding a plant gives the crew the new power immediately.
-    if (delta > 0) {
-      window.ship.currentPower = Math.min(newCapacity, Math.max(0, Number(window.ship.currentPower) || 0) + delta);
-    } else {
-      window.ship.currentPower = Math.min(newCapacity, Math.max(0, Number(window.ship.currentPower) || 0));
+  function updatePowerStat() {
+    const max = capacity();
+    const card = [...document.querySelectorAll('.card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Live Status');
+    if (!card) return;
+    const stat = [...card.querySelectorAll('.stat')].find(s => s.querySelector('small')?.textContent.trim() === 'POWER');
+    if (!stat) return;
+    const input = stat.querySelector('.live-edit');
+    if (input) input.value = Math.max(0, Math.min(max, Number(ship.currentPower) || 0));
+    const oldMini = stat.querySelector('.mini');
+    if (oldMini) oldMini.textContent = `${Math.max(0, Number(ship.currentPower) || 0)} / ${max}`;
+    else {
+      const text = [...stat.childNodes].find(n => n.nodeType === 3);
+      if (text) text.textContent = ` ${Math.max(0, Number(ship.currentPower) || 0)} / ${max}`;
     }
+  }
+
+  function addVisual(type) {
+    const block = [...document.querySelectorAll('#system-stations .system-block')]
+      .find(b => b.querySelector('h3')?.textContent.trim() === 'Power Plant');
+    if (!block) return;
+    const addArea = block.querySelector('.power-add');
+    if (!addArea) return;
+    const item = document.createElement('div');
+    item.className = 'station-item';
+    item.dataset.extraPower = type;
+    item.innerHTML = `<div class="station-item-head"><strong>${type} Power Plant</strong><button class="btn danger" type="button" data-remove-power-direct="${(ship.extraPowerPlants || []).length - 1}">Remove</button></div><small class="muted">${POWER[type]?.capacity || 0} capacity · ${POWER[type]?.size || 0} tonnes</small>`;
+    addArea.before(item);
+  }
+
+  function addPlant(type) {
+    if (!type) return;
+    ship.extraPowerPlants = Array.isArray(ship.extraPowerPlants) ? ship.extraPowerPlants : [];
+    ship.extraPowerPlants.push(type);
+    ship.currentPower = Math.min(capacity(), Math.max(0, Number(ship.currentPower) || 0) + (POWER[type]?.capacity || 0));
     saveQuiet();
-    try { if (typeof render === 'function') render(); } catch (_) {}
+    addVisual(type);
+    updatePowerStat();
   }
 
-  function wire() {
-    const add = document.getElementById('station-add-power');
-    if (add && !add.dataset.powerWired) {
-      add.dataset.powerWired = '1';
-      add.addEventListener('click', () => {
-        const select = document.getElementById('station-power-select');
-        const type = select?.value;
-        if (!type) return;
-        window.ship.extraPowerPlants = window.ship.extraPowerPlants || [];
-        const before = extraCapacity(window.ship);
-        window.ship.extraPowerPlants.push(type);
-        const delta = (POWER[type]?.capacity || 0);
-        const after = before + delta + (window.ship.powerPlant ? 0 : 0);
-        refreshPowerState(before, (POWER[window.ship.powerPlant]?.capacity || 0) + after, delta);
-      });
+  function removePlant(index, button) {
+    const plants = ship.extraPowerPlants || [];
+    if (!Number.isInteger(index) || !plants[index]) return;
+    const type = plants[index];
+    const removedCapacity = POWER[type]?.capacity || 0;
+    plants.splice(index, 1);
+    ship.currentPower = Math.min(capacity(), Math.max(0, Number(ship.currentPower) || 0) - removedCapacity);
+    saveQuiet();
+    button.closest('.station-item')?.remove();
+    document.querySelectorAll('[data-remove-power-direct]').forEach((b, i) => b.dataset.removePowerDirect = i);
+    updatePowerStat();
+  }
+
+  // Capture the station buttons before the older renderer handlers. This prevents
+  // the old handler from rendering the whole page and wiping the calculated state.
+  document.addEventListener('click', event => {
+    const add = event.target.closest?.('#station-add-power');
+    if (add) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const select = document.getElementById('station-power-select');
+      addPlant(select?.value || '');
+      if (select) select.value = '';
+      return;
     }
+    const remove = event.target.closest?.('[data-remove-power], [data-remove-power-direct]');
+    if (remove) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const index = Number(remove.dataset.removePowerDirect ?? remove.dataset.removePower);
+      removePlant(index, remove);
+    }
+  }, true);
 
-    document.querySelectorAll('[data-remove-power]').forEach(btn => {
-      if (btn.dataset.powerWired) return;
-      btn.dataset.powerWired = '1';
-      btn.addEventListener('click', () => {
-        const i = Number(btn.dataset.removePower);
-        const plants = window.ship.extraPowerPlants || [];
-        if (!Number.isInteger(i) || !plants[i]) return;
-        const removed = POWER[plants[i]]?.capacity || 0;
-        plants.splice(i, 1);
-        const total = (POWER[window.ship.powerPlant]?.capacity || 0) + extraCapacity(window.ship);
-        window.ship.currentPower = Math.min(total, Math.max(0, (Number(window.ship.currentPower) || 0) - removed));
-        saveQuiet();
-        try { if (typeof render === 'function') render(); } catch (_) {}
-      });
-    });
-  }
-
-  const observer = new MutationObserver(() => requestAnimationFrame(wire));
   const app = document.getElementById('app');
-  if (app) observer.observe(app, { childList: true, subtree: true });
-  requestAnimationFrame(wire);
+  if (app) new MutationObserver(() => requestAnimationFrame(updatePowerStat)).observe(app, { childList:true, subtree:true });
+  requestAnimationFrame(updatePowerStat);
 })();
