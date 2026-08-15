@@ -1,0 +1,7 @@
+{
+  "name": "astrovoyage-ship-builder",
+  "private": true,
+  "scripts": {
+    "build": "node generate-config.mjs"
+  }
+}
