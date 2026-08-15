@@ -11,26 +11,44 @@
   let lastCapacity = null;
   let syncing = false;
 
-  function updateLivePower() {
-    if (typeof ship === 'undefined' || !ship) return;
+  function syncPower() {
+    if (syncing || typeof ship === 'undefined' || !ship) return;
     const cap = totalCapacity();
+
+    if (lastCapacity === null) {
+      lastCapacity = cap;
+    } else if (cap !== lastCapacity) {
+      syncing = true;
+      const delta = cap - lastCapacity;
+      // Adding/removing a plant changes both capacity and available current power.
+      // Preserve any power the crew has already spent, while applying the plant delta.
+      ship.currentPower = Math.max(0, Math.min(cap, (Number(ship.currentPower) || 0) + delta));
+      lastCapacity = cap;
+      try { if (typeof save === 'function') save(false); } catch (_) {}
+      syncing = false;
+    }
+
+    updateLivePower(cap);
+    updatePowerStation(cap);
+  }
+
+  function updateLivePower(cap) {
     const card = [...document.querySelectorAll('.grid .card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Live Status');
     if (!card) return;
     const stat = [...card.querySelectorAll('.stat')].find(s => s.querySelector('small')?.textContent.trim() === 'POWER');
     if (!stat) return;
+    const value = Math.max(0, Number(ship.currentPower) || 0);
     const edit = stat.querySelector('.live-edit');
     if (edit) {
       edit.max = String(cap);
-      edit.value = String(Math.max(0, Math.min(Number(ship.currentPower) || 0, cap)));
-      const maxText = stat.querySelector('strong i');
-      if (maxText) maxText.textContent = ` / ${cap}`;
+      edit.value = String(value);
       return;
     }
     const strong = stat.querySelector('strong');
-    if (strong) strong.innerHTML = `${Math.max(0, Number(ship.currentPower) || 0)}<i> / ${cap}</i>`;
+    if (strong) strong.innerHTML = `${value}<i> / ${cap}</i>`;
   }
 
-  function updatePowerStation() {
+  function updatePowerStation(cap) {
     const block = [...document.querySelectorAll('.system-block')].find(b => b.querySelector('h3')?.textContent.trim() === 'Power Plant');
     if (!block) return;
     let summary = block.querySelector('.power-capacity-summary');
@@ -43,40 +61,14 @@
       if (addArea) block.insertBefore(summary, addArea);
       else block.appendChild(summary);
     }
-    summary.textContent = `Total power capacity: ${totalCapacity()} units · Current power: ${Number(ship.currentPower) || 0}`;
-  }
-
-  function sync() {
-    if (syncing || typeof ship === 'undefined' || !ship) return;
-    const cap = totalCapacity();
-    if (lastCapacity === null) {
-      lastCapacity = cap;
-      updateLivePower();
-      updatePowerStation();
-      return;
-    }
-    if (cap !== lastCapacity) {
-      syncing = true;
-      const delta = cap - lastCapacity;
-      const oldPower = Number(ship.currentPower) || 0;
-      ship.currentPower = Math.max(0, Math.min(cap, oldPower + delta));
-      lastCapacity = cap;
-      try { if (typeof save === 'function') save(false); } catch (_) {}
-      updateLivePower();
-      updatePowerStation();
-      syncing = false;
-      return;
-    }
-    updateLivePower();
-    updatePowerStation();
+    summary.textContent = `Total power capacity: ${cap} units · Current power: ${Number(ship.currentPower) || 0}`;
   }
 
   const root = document.getElementById('app');
   if (root) {
-    const observer = new MutationObserver(() => {
-      if (!syncing) requestAnimationFrame(sync);
-    });
-    observer.observe(root, { childList: true, subtree: true });
+    new MutationObserver(() => {
+      if (!syncing) requestAnimationFrame(syncPower);
+    }).observe(root, { childList: true, subtree: true });
   }
-  setTimeout(sync, 250);
+  setTimeout(syncPower, 250);
 })();
