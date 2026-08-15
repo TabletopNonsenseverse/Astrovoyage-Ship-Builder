@@ -2,7 +2,7 @@
   if (window.__astroPowerCapacityFix) return;
   window.__astroPowerCapacityFix = true;
 
-  const capacityOf = name => Number(window.POWER?.[name]?.capacity) || 0;
+  const capacityOf = name => Number((typeof POWER !== 'undefined' ? POWER[name]?.capacity : 0)) || 0;
   const totalCapacity = () => {
     if (typeof ship === 'undefined' || !ship) return 0;
     return capacityOf(ship.powerPlant) + (ship.extraPowerPlants || []).reduce((n, p) => n + capacityOf(p), 0);
@@ -18,7 +18,6 @@
     if (!card) return;
     const stat = [...card.querySelectorAll('.stat')].find(s => s.querySelector('small')?.textContent.trim() === 'POWER');
     if (!stat) return;
-
     const edit = stat.querySelector('.live-edit');
     if (edit) {
       edit.max = String(cap);
@@ -27,7 +26,6 @@
       if (maxText) maxText.textContent = ` / ${cap}`;
       return;
     }
-
     const strong = stat.querySelector('strong');
     if (strong) strong.innerHTML = `${Math.max(0, Number(ship.currentPower) || 0)}<i> / ${cap}</i>`;
   }
