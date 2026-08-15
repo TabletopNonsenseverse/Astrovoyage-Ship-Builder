@@ -12,16 +12,24 @@ A shared, persistent ship sheet for the Astrovoyage space TTRPG.
 - Automatic cargo capacity, effective shield HP, command points, ship cost and monthly maintenance calculations.
 - Campaign notes.
 - Works locally in a browser before Supabase is configured.
+- Vercel-ready static deployment.
 
-## Enable shared saving
+## Deploy with Vercel
 
 1. Create a Supabase project.
 2. Open the Supabase SQL Editor and run `supabase.sql`.
-3. Put your Supabase project URL and anon/publishable browser key in `config.js`.
-4. Deploy this repository as a static site (GitHub Pages, Netlify, Vercel, etc.).
-5. Open the site and use **Copy share link**. Give that URL to the GM and players.
+3. In Vercel, import this GitHub repository.
+4. In Vercel **Settings → Environment Variables**, add:
+   - `SUPABASE_URL` = your Supabase project URL
+   - `SUPABASE_ANON_KEY` = your Supabase anon/publishable browser key
+5. Redeploy after adding the variables.
+6. Open the deployed site and use **Copy share link**. Give that URL to the GM and players.
 
-Do not put a Supabase `service_role` key in `config.js`. Only the browser anon/publishable key belongs there.
+The frontend uses the browser-safe Supabase anon/publishable key. Never put a Supabase `service_role` key in Vercel environment variables intended for the browser or in the repository.
+
+## Supabase configuration note
+
+The current static frontend reads `window.SUPABASE_URL` and `window.SUPABASE_ANON_KEY`. If your Vercel deployment does not inject those values into the static page, use the included `config.js` as the deployment configuration file, or add a tiny Vercel build step that generates `config.js` from the two environment variables. Do not commit the actual secret values.
 
 ## Rule data
 
