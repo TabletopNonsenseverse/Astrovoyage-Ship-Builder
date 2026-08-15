@@ -1,4 +1,4 @@
-// Local fallback configuration only. For Vercel, prefer environment-backed
-// configuration at build/deploy time. These values may safely remain empty.
-window.SUPABASE_URL = window.SUPABASE_URL || '';
-window.SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY || '';
+// Supabase client configuration for the deployed ship builder.
+// This is the publishable/anon key; it is intended for browser use.
+window.SUPABASE_URL = 'https://dgllzmwjzirnvpekjpij.supabase.co';
+window.SUPABASE_ANON_KEY = 'sb_publishable_iZ00EqMGBu5R3K-e9DKF-A__ABVi7CH';
