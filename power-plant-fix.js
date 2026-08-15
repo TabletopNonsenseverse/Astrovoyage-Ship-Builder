@@ -6,8 +6,6 @@
   const capacityOf = name => Number((typeof POWER !== 'undefined' ? POWER?.[name]?.capacity : 0) || 0);
   const totalCapacity = s => capacityOf(s.powerPlant) + (s.extraPowerPlants || []).reduce((n, p) => n + capacityOf(p), 0);
 
-  // The base app's normalise() clamps currentPower to the PRIMARY plant only.
-  // Wrap it so additional plants are part of the legal power ceiling.
   if (typeof window.normalise === 'function') {
     const baseNormalise = window.normalise;
     window.normalise = function () {
@@ -19,7 +17,6 @@
     };
   }
 
-  // Wrap calc() so every existing Live Status renderer sees the combined capacity.
   if (typeof window.calc === 'function') {
     const baseCalc = window.calc;
     window.calc = function () {
@@ -28,6 +25,25 @@
       if (s && result?.p) result.p = { ...result.p, capacity: totalCapacity(s) };
       return result;
     };
+  }
+
+  function updateLiveStatus() {
+    const s = getShip();
+    if (!s) return;
+    const cap = totalCapacity(s);
+    const power = Math.max(0, Math.min(cap, Number(s.currentPower) || 0));
+    const card = [...document.querySelectorAll('.card')].find(c => c.querySelector('h2')?.textContent.trim() === 'Live Status');
+    if (!card) return;
+    const stat = [...card.querySelectorAll('.stat')].find(x => x.querySelector('small')?.textContent.trim() === 'POWER');
+    if (!stat) return;
+    const input = stat.querySelector('.live-edit');
+    if (input) {
+      input.max = String(cap);
+      input.value = String(power);
+      return;
+    }
+    const strong = stat.querySelector('strong');
+    if (strong) strong.innerHTML = `${power}<i> / ${cap}</i>`;
   }
 
   document.addEventListener('click', event => {
@@ -51,14 +67,23 @@
       delta = -capacityOf(plant);
     }
 
-    if (!delta) return;
-    s.currentPower = Math.max(0, (Number(s.currentPower) || 0) + delta);
+    const beforePower = Number(s.currentPower) || 0;
+    const desiredPower = Math.max(0, beforePower + delta);
 
-    // The normal handler performs the actual list mutation and render.
-    // Keep the viewport stable after that render.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.scrollTo(0, scrollY));
-    });
-    setTimeout(() => window.scrollTo(0, scrollY), 50);
+    // The existing handler performs the list mutation and render. Re-apply the
+    // power delta after that render so it cannot be lost during re-render.
+    setTimeout(() => {
+      const current = getShip();
+      if (!current) return;
+      current.currentPower = desiredPower;
+      try { if (typeof save === 'function') save(false); } catch (_) {}
+      updateLiveStatus();
+      window.scrollTo(0, scrollY);
+    }, 0);
+
+    setTimeout(() => {
+      updateLiveStatus();
+      window.scrollTo(0, scrollY);
+    }, 50);
   }, true);
 })();
