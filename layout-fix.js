@@ -1,61 +1,38 @@
 (() => {
-  if (window.__astroLayoutFix) return;
-  window.__astroLayoutFix = true;
+  if (window.__astroTravelFix) return;
+  window.__astroTravelFix = true;
 
-  function moveTravelAndLog() {
-    const grid = document.querySelector('.grid');
-    if (!grid) return;
-
-    // Remove the old standalone Travel card. Travel belongs in Power Plant.
-    grid.querySelectorAll('.card').forEach(card => {
-      const heading = card.querySelector('h2')?.textContent?.trim().toLowerCase();
-      if (heading === 'travel') card.remove();
-    });
-
+  function moveTravel() {
     const stations = document.getElementById('system-stations');
     if (!stations) return;
 
-    const blocks = stations.querySelectorAll('.system-block');
-    let powerBlock = null;
-    let engineeringBlock = null;
-    blocks.forEach(block => {
-      const name = block.querySelector('h3')?.textContent?.trim();
-      if (name === 'Power Plant') powerBlock = block;
-      if (name === 'Engineering') engineeringBlock = block;
-    });
+    const blocks = [...stations.querySelectorAll('.system-block')];
+    const power = blocks.find(b => b.querySelector('h3')?.textContent?.trim() === 'Power Plant');
+    const engineering = blocks.find(b => b.querySelector('h3')?.textContent?.trim() === 'Engineering');
+    if (!power || !engineering) return;
 
-    // Move the existing Travel action from Engineering into Power Plant.
-    if (powerBlock && engineeringBlock) {
-      const powerActions = powerBlock.querySelector('.system-actions');
-      const engineeringActions = engineeringBlock.querySelector('.system-actions');
-      if (powerActions && engineeringActions) {
-        [...engineeringActions.querySelectorAll('.action-card')].forEach(card => {
-          if (card.querySelector('.action-head strong')?.textContent?.trim() === 'Travel') {
-            powerActions.appendChild(card);
-          }
-        });
-      }
-    }
+    const powerActions = power.querySelector('.system-actions');
+    const engineeringActions = engineering.querySelector('.system-actions');
+    if (!powerActions || !engineeringActions) return;
 
-    // Ship's Log is always the final block on the page.
-    const log = document.getElementById('ships-log');
-    if (log) grid.appendChild(log);
+    const travel = [...engineeringActions.querySelectorAll('.action-card')].find(card =>
+      card.querySelector('.action-head strong')?.textContent?.trim() === 'Travel'
+    );
+    if (travel) powerActions.appendChild(travel);
   }
 
-  let running = false;
-  function apply() {
-    if (running) return;
-    running = true;
-    try { moveTravelAndLog(); } finally { running = false; }
+  function watchStations() {
+    const stations = document.getElementById('system-stations');
+    if (!stations || stations.__astroTravelObserved) return;
+    stations.__astroTravelObserved = true;
+    const observer = new MutationObserver(() => requestAnimationFrame(moveTravel));
+    observer.observe(stations, { childList: true, subtree: true });
+    requestAnimationFrame(moveTravel);
   }
 
-  const root = document.getElementById('app');
-  if (root) {
-    const observer = new MutationObserver(() => {
-      if (!running) requestAnimationFrame(apply);
-    });
-    observer.observe(root, { childList: true, subtree: true });
-  }
-
-  requestAnimationFrame(apply);
+  const app = document.getElementById('app');
+  if (!app) return;
+  const observer = new MutationObserver(() => requestAnimationFrame(watchStations));
+  observer.observe(app, { childList: true });
+  requestAnimationFrame(watchStations);
 })();
