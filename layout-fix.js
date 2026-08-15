@@ -1,8 +1,18 @@
 (() => {
-  if (window.__astroTravelFix) return;
-  window.__astroTravelFix = true;
+  if (window.__astroLayoutFixV2) return;
+  window.__astroLayoutFixV2 = true;
 
-  function moveTravel() {
+  function fixLayout() {
+    const app = document.getElementById('app');
+    const grid = app?.querySelector('.grid');
+    if (!grid) return;
+
+    // The old standalone Travel card must never exist on the finished sheet.
+    grid.querySelectorAll('.card').forEach(card => {
+      const heading = card.querySelector('h2')?.textContent?.trim().toLowerCase();
+      if (heading === 'travel') card.remove();
+    });
+
     const stations = document.getElementById('system-stations');
     if (!stations) return;
 
@@ -15,24 +25,35 @@
     const engineeringActions = engineering.querySelector('.system-actions');
     if (!powerActions || !engineeringActions) return;
 
-    const travel = [...engineeringActions.querySelectorAll('.action-card')].find(card =>
-      card.querySelector('.action-head strong')?.textContent?.trim() === 'Travel'
-    );
-    if (travel) powerActions.appendChild(travel);
+    // The stable renderer currently creates Travel under Engineering.
+    // Move that action into Power Plant every time the station is rebuilt.
+    [...engineeringActions.querySelectorAll('.action-card')].forEach(card => {
+      if (card.querySelector('.action-head strong')?.textContent?.trim() === 'Travel') {
+        powerActions.appendChild(card);
+      }
+    });
+
+    // Keep exactly one Ship's Log and always put it last.
+    const logs = [...grid.querySelectorAll('#ships-log')];
+    if (logs.length) {
+      const log = logs[logs.length - 1];
+      logs.slice(0, -1).forEach(x => x.remove());
+      grid.appendChild(log);
+    }
   }
 
-  function watchStations() {
-    const stations = document.getElementById('system-stations');
-    if (!stations || stations.__astroTravelObserved) return;
-    stations.__astroTravelObserved = true;
-    const observer = new MutationObserver(() => requestAnimationFrame(moveTravel));
-    observer.observe(stations, { childList: true, subtree: true });
-    requestAnimationFrame(moveTravel);
+  let scheduled = false;
+  function schedule() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      fixLayout();
+    });
   }
 
   const app = document.getElementById('app');
   if (!app) return;
-  const observer = new MutationObserver(() => requestAnimationFrame(watchStations));
-  observer.observe(app, { childList: true });
-  requestAnimationFrame(watchStations);
+  new MutationObserver(schedule).observe(app, { childList: true, subtree: true });
+  schedule();
 })();
