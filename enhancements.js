@@ -58,6 +58,7 @@
     #ships-log textarea{display:block;width:100%;min-height:520px;box-sizing:border-box;resize:vertical;background:#0c1422;color:#e8edf7;border:1px solid #394966;border-radius:10px;padding:16px;font:inherit;line-height:1.55}
     #ships-log .log-count{margin-top:7px;font-size:.75rem;color:#91a1bd;text-align:right}
     .money-input{width:100%;box-sizing:border-box;background:#0c1422;color:#e8edf7;border:1px solid #394966;border-radius:7px;padding:6px}
+    .power-capacity{font-size:.75rem;color:#91a1bd;margin-top:8px}
     @media(max-width:800px){.system-blocks{grid-template-columns:1fr}.mod-add,.weapon-add,.power-add{flex-direction:column}.installed-mod{grid-template-columns:1fr}}
   `;
   document.head.appendChild(style);
@@ -101,10 +102,28 @@
     return `${rows||'<div class="station-item"><span class="muted">No weapons installed.</span></div>'}<div class="weapon-add"><select id="station-weapon-select"><option value="">Add weapon…</option>${Object.entries(WEAPONS).map(([k,v])=>`<option value="${k}">${esc(v.name)} · ${esc(v.cost)}</option>`).join('')}</select><button class="btn primary" id="station-add-weapon" type="button">Add weapon</button></div>`;
   }
 
+  function powerTotals(){
+    const primary=ship.powerPlant||'Basic';
+    const primaryCap=Number(POWER[primary]?.capacity||0);
+    const extras=ship.extraPowerPlants||[];
+    const extraCap=extras.reduce((sum,p)=>sum+Number(POWER[p]?.capacity||0),0);
+    return {capacity:primaryCap+extraCap,primaryCap,extraCap};
+  }
+
   function powerMarkup(){
+    const totals=powerTotals();
     const extras=(ship.extraPowerPlants||[]).map((p,i)=>`<div class="station-item"><div class="station-item-head"><strong>${esc(p)} Power Plant</strong><button class="btn danger" type="button" data-remove-power="${i}">Remove</button></div><small class="muted">${POWER[p]?.capacity||0} capacity · ${POWER[p]?.size||0} tonnes</small></div>`).join('');
     const primary=ship.powerPlant||'Basic';
-    return `<div class="station-item"><div class="station-item-head"><strong>Primary: ${esc(primary)} Power Plant</strong><span>${POWER[primary]?.capacity||0} capacity</span></div></div>${extras}<div class="power-add"><select id="station-power-select"><option value="">Add power plant…</option>${Object.entries(POWER).map(([k,v])=>`<option value="${k}">${esc(k)} · ${esc(v.cost)} · ${v.capacity} capacity</option>`).join('')}</select><button class="btn primary" id="station-add-power" type="button">Add power plant</button></div>`;
+    return `<div class="station-item"><div class="station-item-head"><strong>Primary: ${esc(primary)} Power Plant</strong><span>${POWER[primary]?.capacity||0} capacity</span></div></div>${extras}<div class="power-capacity">Total power capacity: <strong>${totals.capacity}</strong></div><div class="power-add"><select id="station-power-select"><option value="">Add power plant…</option>${Object.entries(POWER).map(([k,v])=>`<option value="${k}">${esc(k)} · ${esc(v.cost)} · ${v.capacity} capacity</option>`).join('')}</select><button class="btn primary" id="station-add-power" type="button">Add power plant</button></div>`;
+  }
+
+  function syncPowerFromPlants(delta){
+    const totals=powerTotals();
+    const oldCap=Number(ship.powerCapacity ?? (totals.capacity-delta));
+    ship.powerCapacity=totals.capacity;
+    if(delta!==0) ship.currentPower=Math.max(0,Number(ship.currentPower||0)+delta);
+    if(ship.currentPower>ship.powerCapacity)ship.currentPower=ship.powerCapacity;
+    saveQuiet();
   }
 
   function buildStations(){
@@ -129,8 +148,8 @@
     wrap.querySelectorAll('[data-remove-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.mods=(ship.mods||[]).filter(m=>m!==btn.dataset.removeMod);saveQuiet();buildStations();}));
     wrap.querySelector('#station-add-weapon')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-weapon-select')?.value;if(!v)return;ship.weapons=ship.weapons||[];ship.weapons.push({type:v,qty:1});saveQuiet();buildStations();});
     wrap.querySelectorAll('[data-remove-weapon]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.weapons.splice(Number(btn.dataset.removeWeapon),1);saveQuiet();buildStations();}));
-    wrap.querySelector('#station-add-power')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-power-select')?.value;if(!v)return;ship.extraPowerPlants=ship.extraPowerPlants||[];ship.extraPowerPlants.push(v);saveQuiet();buildStations();});
-    wrap.querySelectorAll('[data-remove-power]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.extraPowerPlants.splice(Number(btn.dataset.removePower),1);saveQuiet();buildStations();}));
+    wrap.querySelector('#station-add-power')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-power-select')?.value;if(!v)return;ship.extraPowerPlants=ship.extraPowerPlants||[];ship.extraPowerPlants.push(v);const cap=Number(POWER[v]?.capacity||0);ship.powerCapacity=powerTotals().capacity;ship.currentPower=Math.min(ship.powerCapacity,Math.max(0,Number(ship.currentPower||0)+cap));saveQuiet();buildStations();}));
+    wrap.querySelectorAll('[data-remove-power]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const i=Number(btn.dataset.removePower);const v=ship.extraPowerPlants?.[i];const cap=Number(POWER[v]?.capacity||0);if(!v)return;ship.extraPowerPlants.splice(i,1);ship.powerCapacity=powerTotals().capacity;ship.currentPower=Math.max(0,Number(ship.currentPower||0)-cap);if(ship.currentPower>ship.powerCapacity)ship.currentPower=ship.powerCapacity;saveQuiet();buildStations();}));
   }
 
   function buildLog(){
