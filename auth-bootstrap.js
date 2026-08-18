@@ -9,6 +9,7 @@
 
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   window.astroAuth = client;
+  const authRedirect = () => `${window.location.origin}${window.location.pathname}`;
 
   const style = document.createElement('style');
   style.textContent = `
@@ -33,7 +34,7 @@
       const email = document.getElementById('astro-email').value.trim();
       const password = document.getElementById('astro-password').value;
       if(!email || password.length < 6){ authScreen('Enter an email and a password of at least 6 characters.'); return; }
-      const {data,error} = await client.auth.signUp({email,password});
+      const {data,error} = await client.auth.signUp({email,password,options:{emailRedirectTo:authRedirect()}});
       if(error){ authScreen(error.message); return; }
       if(data.session) startApp(); else authScreen('Account created. Check your email to confirm your account, then sign in.');
     };
@@ -59,13 +60,13 @@
   async function showLibrary(){
     const {data:{user}}=await client.auth.getUser();
     if(!user)return authScreen();
-    const {data,error}=await client.from('ships').select('token,data,created_at,updated_at').order('updated_at',{ascending:false});
-    if(error){alert('Ship Library is not ready yet. Apply the Supabase ownership migration first.');return;}
-    app.innerHTML=`<div id="astro-library"><div class="wrap"><header><div><div class="muted">ASTROVOYAGE</div><h1>My Ships</h1><div class="muted">${user.email}</div></div><div><button class="astro-primary" id="astro-new">New Ship</button><button id="astro-back">Back to Builder</button></div></header><div id="astro-ships">${(data||[]).map(row=>{const d=row.data||{};return `<div class="ship-card"><div><strong>${escapeHtml(d.name||'Unnamed Vessel')}</strong><div class="muted">${escapeHtml(d.hull||'Unknown hull')} · ${row.updated_at?new Date(row.updated_at).toLocaleString():''}</div></div><div><button class="astro-open" data-token="${escapeHtml(row.token)}">Open</button><button class="astro-delete" data-token="${escapeHtml(row.token)}">Delete</button></div></div>`}).join('') || '<p class="muted">No ships yet. Create your first ship.</p>'}</div></div></div>`;
+    const {data,error}=await client.rpc('list_my_ships');
+    if(error){alert('Unable to load your ships: '+error.message);return;}
+    app.innerHTML=`<div id="astro-library"><div class="wrap"><header><div><div class="muted">ASTROVOYAGE</div><h1>My Ships</h1><div class="muted">${escapeHtml(user.email)}</div></div><div><button class="astro-primary" id="astro-new">New Ship</button><button id="astro-back">Back to Builder</button></div></header><div id="astro-ships">${(data||[]).map(row=>{const d=row.data||{};return `<div class="ship-card"><div><strong>${escapeHtml(d.name||'Unnamed Vessel')}</strong><div class="muted">${escapeHtml(d.hull||'Unknown hull')} · ${row.updated_at?new Date(row.updated_at).toLocaleString():''}</div></div><div><button class="astro-open" data-token="${escapeHtml(row.share_token)}">Open</button><button class="astro-delete" data-token="${escapeHtml(row.share_token)}">Delete</button></div></div>`}).join('') || '<p class="muted">No ships yet. Create your first ship.</p>'}</div></div></div>`;
     document.getElementById('astro-back').onclick=()=>location.reload();
     document.getElementById('astro-new').onclick=()=>{location.href=location.pathname+'?new=1'};
     document.querySelectorAll('.astro-open').forEach(b=>b.onclick=()=>{location.href=location.pathname+'?ship='+encodeURIComponent(b.dataset.token)});
-    document.querySelectorAll('.astro-delete').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this ship? This cannot be undone.'))return;const {error}=await client.from('ships').delete().eq('token',b.dataset.token);if(error)alert(error.message);else showLibrary();});
+    document.querySelectorAll('.astro-delete').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this ship? This cannot be undone.'))return;const {error}=await client.from('ships').delete().eq('share_token',b.dataset.token);if(error)alert(error.message);else showLibrary();});
   }
 
   function escapeHtml(v){return String(v||'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));}
