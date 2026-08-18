@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Confirming Astrovoyage account…</title>
+  <style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#080c16;color:#fff;font:16px system-ui,sans-serif}main{max-width:520px;padding:32px;text-align:center}p{color:#aeb8cb}</style>
+</head>
+<body><main><h1>Confirming your account…</h1><p id="msg">Please wait.</p></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/config.js"></script>
+<script>
+(async()=>{
+  const msg=document.getElementById('msg');
+  const client=supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
+  const q=new URLSearchParams(location.search);
+  const token_hash=q.get('token_hash');
+  const type=q.get('type') || 'email';
+  if(token_hash){
+    const {error}=await client.auth.verifyOtp({token_hash,type});
+    if(error){msg.textContent='This confirmation link is invalid or has expired. Please request a new confirmation email.';return;}
+    location.replace('/');
+    return;
+  }
+  if(location.hash.includes('access_token=')){
+    location.replace('/'+location.hash);
+    return;
+  }
+  msg.textContent='No confirmation token was found.';
+})();
+</script></body>
+</html>
