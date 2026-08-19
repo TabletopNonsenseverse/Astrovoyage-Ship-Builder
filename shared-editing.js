@@ -6,9 +6,9 @@
     'damage','clearDamage','toggleMod','addWeapon','removeWeapon','weaponType',
     'weaponQty','setCountdown','nextRound','startFTL'
   ];
-
   const clone = value => JSON.parse(JSON.stringify(value));
   const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
+  let installed = false;
 
   function updateUndoUi() {
     const button = document.getElementById('astro-undo-button');
@@ -47,26 +47,34 @@
     updateUndoUi();
   }
 
-  mutationNames.forEach(name => {
-    const original = window[name];
-    if (typeof original !== 'function') return;
-    window[name] = function(...args) {
-      if (typeof ship === 'undefined' || !ship) return original.apply(this,args);
-      const before = clone(ship);
-      const result = original.apply(this,args);
-      if (typeof ship !== 'undefined' && ship && !same(before, ship)) pushUndo(before);
-      return result;
-    };
-  });
+  function install() {
+    if (installed || typeof window.setv !== 'function' || typeof window.render !== 'function') return;
+    installed = true;
+    mutationNames.forEach(name => {
+      const original = window[name];
+      if (typeof original !== 'function') return;
+      window[name] = function(...args) {
+        if (typeof ship === 'undefined' || !ship) return original.apply(this,args);
+        const before = clone(ship);
+        const result = original.apply(this,args);
+        if (typeof ship !== 'undefined' && ship && !same(before, ship)) pushUndo(before);
+        return result;
+      };
+    });
+    document.addEventListener('keydown', event => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.shiftKey) return;
+      const active = document.activeElement;
+      const typing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+      if (typing) return;
+      event.preventDefault();
+      undo();
+    });
+    installUndoUi();
+  }
 
-  document.addEventListener('keydown', event => {
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.shiftKey) return;
-    const active = document.activeElement;
-    const typing = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
-    if (typing) return;
-    event.preventDefault();
-    undo();
-  });
-
-  installUndoUi();
+  const timer = setInterval(() => {
+    install();
+    if (installed) clearInterval(timer);
+  }, 100);
+  install();
 })();
