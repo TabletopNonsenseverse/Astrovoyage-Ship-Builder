@@ -1,6 +1,6 @@
 # Astrovoyage Ship Builder
 
-A shared, persistent ship sheet for the Astrovoyage space TTRPG.
+A shared, persistent ship sheet for the Astrovoyage space TTRPG
 
 ## Features
 
