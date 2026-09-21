@@ -38,7 +38,7 @@
     if (logs.length) {
       const log = logs[logs.length - 1];
       logs.slice(0, -1).forEach(x => x.remove());
-      grid.appendChild(log);
+      if (grid.lastElementChild !== log) grid.appendChild(log);
     }
   }
 
