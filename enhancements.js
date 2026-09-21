@@ -154,6 +154,15 @@
   function buildLog(){
     if(typeof ship==='undefined')return;
     const grid=document.querySelector('.grid');if(!grid)return;
+    const existing=document.getElementById('ships-log');
+    if(existing && existing.parentElement===grid){
+      const ta=existing.querySelector('textarea');
+      const value=String(ship.notes||'');
+      if(ta && document.activeElement!==ta && ta.value!==value) ta.value=value;
+      const counts=existing.querySelectorAll('.log-count');
+      counts.forEach(x=>x.textContent=`${value.length.toLocaleString()} / 100,000`);
+      return;
+    }
     document.querySelectorAll('#ships-log,.ships-log').forEach(x=>x.remove());
     const log=document.createElement('section');log.id='ships-log';log.className='card wide';
     const value=String(ship.notes||'');
