@@ -77,6 +77,22 @@
     document.getElementById('astro-combat')?.remove();
   }
 
+  function updateCargoCard(){
+    if(typeof calc!=='function'||typeof ship==='undefined')return;
+    const c=calc();
+    const card=[...document.querySelectorAll('.grid .card')].find(x=>x.querySelector('h2')?.textContent.trim()==='Cargo & Crew');
+    if(!card)return;
+    const used=Math.min(Math.max(0,Number(ship.cargoUsed)||0),c.cargo);
+    const meter=card.querySelector('.meter span');
+    if(meter) meter.style.width=Math.min(100,c.cargo?used/c.cargo*100:0)+'%';
+    const split=card.querySelector('.split');
+    if(split){const parts=split.children;if(parts[0])parts[0].textContent=used+' t used';if(parts[1])parts[1].textContent=Math.max(0,c.cargo-used)+' t free';}
+    const note=card.querySelector('.muted');
+    if(note)note.textContent='Hull cargo: '+c.h.cargo+' t · installed modifications and additional power plants occupy '+c.used+' t';
+    const input=card.querySelector('input[type="number"]');
+    if(input){input.max=String(c.cargo);input.value=String(used);}
+  }
+
   function updateLiveStatus(){
     const card=[...document.querySelectorAll('.grid .card')].find(c=>c.querySelector('h2')?.textContent.trim()==='Live Status');
     if(!card||typeof ship==='undefined')return;
@@ -87,6 +103,7 @@
       const cargo=calc().cargo;
       cargoStat.innerHTML=`<small>CARGO</small><strong>${Math.min(Math.max(0,Number(ship.cargoUsed)||0),cargo)}<i> / ${cargo} t</i></strong><button class="mini" onclick="cargoAdd(1)">+1t</button>`;
     }
+    updateCargoCard();
     const stat=[...card.querySelectorAll('.stat')].find(s=>s.querySelector('small')?.textContent.trim()==='POWER');
     if(!stat)return;
     const cap=powerCapacity();
@@ -148,8 +165,8 @@
   }
 
   function bindStationEvents(wrap){
-    wrap.querySelectorAll('[data-add-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const sel=wrap.querySelector(`[data-mod-select="${btn.dataset.addMod}"]`);if(!sel?.value)return;ship.mods=ship.mods||[];if(!ship.mods.includes(sel.value))ship.mods.push(sel.value);saveQuiet();buildStations();}));
-    wrap.querySelectorAll('[data-remove-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.mods=(ship.mods||[]).filter(m=>m!==btn.dataset.removeMod);saveQuiet();buildStations();}));
+    wrap.querySelectorAll('[data-add-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();const sel=wrap.querySelector(`[data-mod-select="${btn.dataset.addMod}"]`);if(!sel?.value)return;ship.mods=ship.mods||[];if(!ship.mods.includes(sel.value))ship.mods.push(sel.value);normalise();saveQuiet();buildStations();updateLiveStatus();}));
+    wrap.querySelectorAll('[data-remove-mod]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.mods=(ship.mods||[]).filter(m=>m!==btn.dataset.removeMod);normalise();saveQuiet();buildStations();updateLiveStatus();}));
     wrap.querySelector('#station-add-weapon')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-weapon-select')?.value;if(!v)return;ship.weapons=ship.weapons||[];ship.weapons.push({type:v,qty:1});saveQuiet();buildStations();});
     wrap.querySelectorAll('[data-remove-weapon]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();ship.weapons.splice(Number(btn.dataset.removeWeapon),1);saveQuiet();buildStations();}));
     wrap.querySelector('#station-add-power')?.addEventListener('click',e=>{e.preventDefault();const v=wrap.querySelector('#station-power-select')?.value;if(!v)return;const y=window.scrollY;const oldCap=Number.isFinite(Number(ship.powerCapacity))?Number(ship.powerCapacity):powerCapacity();ship.extraPowerPlants=ship.extraPowerPlants||[];ship.extraPowerPlants.push(v);ship.powerCapacity=oldCap+Number(POWER?.[v]?.capacity||0);normalise();saveQuiet();buildStations();updateLiveStatus();requestAnimationFrame(()=>window.scrollTo({top:y,left:0,behavior:'auto'}));});
